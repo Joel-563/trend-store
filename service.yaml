@@ -2,14 +2,13 @@ apiVersion: v1
 kind: Service
 metadata:
   name: trend-store-service
-  namespace: test
   annotations:
     service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
 spec:
   selector:
     app: trend-store
   ports:
-  - protocol: TCP
-    port: 3000
-    targetPort: 3000
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
   type: LoadBalancer

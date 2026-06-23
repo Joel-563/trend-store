@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: trend-store
-  namespace: test
 spec:
   replicas: 2
   selector:
@@ -15,11 +14,7 @@ spec:
     spec:
       containers:
         - name: trend-store
-          image: joelrobinson791/trend-store-app:v1
+          image: joelrobinson791/trend-store-app:latest
           ports:
-          - containerPort: 3000
-
-
-
-
+            - containerPort: 3000
 

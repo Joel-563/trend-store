@@ -1,0 +1,125 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Cloning repository'
+
+                git(
+                    branch: 'main',
+                    credentialsId: 'git-access',
+                    url: 'https://github.com/Joel-563/trend-store.git'
+                )
+            }
+        }
+
+        stage('Pre-Build') {
+            steps {
+                echo 'Preparing Docker image details'
+
+                script {
+                    env.COMMIT_HASH = sh(
+                        script: 'git rev-parse --short=7 HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    env.IMAGE_TAG = env.COMMIT_HASH
+                    env.IMAGE_URI_UNIQUE =
+                        "${params.DOCKER_USERNAME}/${params.IMAGE_NAME}:${env.IMAGE_TAG}-${params.VERSION}"
+                    env.IMAGE_URI_READABLE =
+                        "${params.DOCKER_USERNAME}/${params.IMAGE_NAME}:${params.VERSION}"
+                }
+
+                echo 'Logging in to Docker Hub'
+                sh '''
+                    printf "%s" "$DOCKER_TOKEN" |
+                        docker login \
+                            --username "$DOCKER_USERNAME" \
+                            --password-stdin
+                '''
+
+                echo "Unique image: ${env.IMAGE_URI_UNIQUE}"
+                echo "Readable image: ${env.IMAGE_URI_READABLE}"
+            }
+        }
+
+        stage('Build') {
+            steps {
+                echo 'Building Docker image'
+                sh 'docker build --tag "$IMAGE_URI_UNIQUE" .'
+            }
+        }
+
+        stage('Post-Build') {
+            steps {
+                echo 'Tagging and pushing Docker images'
+
+                sh '''
+                    docker tag "$IMAGE_URI_UNIQUE" "$IMAGE_URI_READABLE"
+                    docker push "$IMAGE_URI_UNIQUE"
+                    docker push "$IMAGE_URI_READABLE"
+                '''
+            }
+        }
+
+        stage('Deploy to EKS') {
+            steps {
+                echo "Deploying to EKS namespace: ${params.NAMESPACE}"
+
+                withCredentials([
+                    aws(
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        credentialsId: 'jenkins',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    )
+                ]) {
+                    sh '''
+                        aws eks update-kubeconfig \
+                            --name "$EKS_CLUSTER_NAME" \
+                            --region "$AWS_REGION"
+
+                        kubectl apply -n "$NAMESPACE" -f deployment.yaml
+                        kubectl apply -n "$NAMESPACE" -f service.yaml
+
+                        kubectl rollout restart \
+                            -n "$NAMESPACE" \
+                            deployment/trend-store
+
+                        kubectl rollout status \
+                            -n "$NAMESPACE" \
+                            deployment/trend-store \
+                            --timeout=2m
+                    '''
+
+                    timeout(time: 3, unit: 'MINUTES') {
+                        script {
+                            env.LOAD_BALANCER_DNS = sh(
+                                script: '''
+                                    LOAD_BALANCER_DNS=""
+
+                                    until [ -n "$LOAD_BALANCER_DNS" ]; do
+                                        LOAD_BALANCER_DNS=$(kubectl get service trend-store-service \
+                                            -n "$NAMESPACE" \
+                                            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+
+                                        if [ -z "$LOAD_BALANCER_DNS" ]; then
+                                            echo "Waiting for LoadBalancer DNS..." >&2
+                                            sleep 5
+                                        fi
+                                    done
+
+                                    printf "%s" "$LOAD_BALANCER_DNS"
+                                ''',
+                                returnStdout: true
+                            ).trim()
+                        }
+                    }
+
+                    echo "LoadBalancer DNS: ${env.LOAD_BALANCER_DNS}"
+                    echo "Application URL: http://${env.LOAD_BALANCER_DNS}:3000"
+                }
+            }
+        }
+    }
+}
