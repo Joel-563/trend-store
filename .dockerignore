@@ -1,0 +1,9 @@
+# Send only the files needed by the Dockerfile.
+# Dockerfile copies dist/ and nginx.conf into the Nginx image.
+
+**
+
+!Dockerfile
+!nginx.conf
+!dist/
+!dist/**

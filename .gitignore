@@ -1,0 +1,79 @@
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment and secret files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.csr
+id_rsa*
+id_ed25519*
+
+# AWS / cloud credentials accidentally copied into the repo
+.aws/
+aws-credentials*
+*_credentials.csv
+
+# Node dependencies
+node_modules/
+
+# Keep dist/ committed in this project.
+# The application is already built and Docker copies dist/ into Nginx.
+
+# Docker local files
+.docker/
+docker-compose.override.yml
+
+# Terraform generated files
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Terraform variable files can contain local or sensitive values.
+*.tfvars
+*.tfvars.json
+*.auto.tfvars
+*.auto.tfvars.json
+!*.tfvars.example
+!*.tfvars.json.example
+
+# Jenkins local data, if copied into the project
+jenkins_home/
+.jenkins/
+jenkins_workspace/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup

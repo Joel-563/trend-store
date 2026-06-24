@@ -12,7 +12,7 @@ provider "aws" {
 }
 
 module "vpc" {
-  source = "../terraform/modules/vpc"
+  source = "../modules/vpc"
 
   name       = var.name
   cidr       = var.cidr
@@ -27,13 +27,13 @@ module "vpc" {
   tags               = var.tags
 }
 module "keypair" {
-  source = "../terraform/modules/keypair"
+  source = "../modules/keypair"
 
   key_pair_name = "${var.name}-keypair"
   rsa_bits      = var.rsa_bits
 }
 module "ec2_instance" {
-  source = "../terraform/modules/EC2"
+  source = "../modules/EC2"
 
   ec2_name                     = var.ec2_name
   ami                          = var.ami
@@ -61,7 +61,7 @@ module "ec2_instance" {
   key_name                     = module.keypair.key_pair_name
 }
 module "eks" {
-  source = "../terraform/modules/EKS"
+  source = "../modules/EKS"
 
   name                     = "${var.name}-cluster"
   kubernetes_version       = "1.34"
@@ -129,14 +129,14 @@ module "eks" {
 
 }
 module "ebs-pod-identity" {
-  source = "../terraform/modules/eks-pod-identity"
+  source = "../modules/eks-pod-identity"
 
   attach_aws_ebs_csi_policy = true
   name                      = "${var.name}-ebs-role"
 }
 
 module "vpc-cni-pod-identity" {
-  source = "../terraform/modules/eks-pod-identity"
+  source = "../modules/eks-pod-identity"
 
   attach_aws_vpc_cni_policy = true
   aws_vpc_cni_enable_ipv4   = true
