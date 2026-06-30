@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: trend-store-servicemonitor
+  namespace: test
+  labels:
+    release: prom
+spec:
+  namespaceSelector:
+    matchNames:
+      - trend-app
+  selector:
+    matchLabels:
+      app: trend-store
+  endpoints:
+    - port: http
+      path: /
+      interval: 30s

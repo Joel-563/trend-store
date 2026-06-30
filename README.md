@@ -71,7 +71,10 @@ Application exposed using Kubernetes LoadBalancer
 |-- Dockerfile                # Docker image for the application
 |-- nginx.conf                # Nginx config to serve app on port 3000
 |-- deployment.yaml           # Kubernetes Deployment
-|-- service.yaml              # Kubernetes LoadBalancer Service
+|-- service.yaml              # Kubernetes Service
+|-- servicemonitor.yaml       # Prometheus ServiceMonitor for monitoring
+|-- values.yaml               # Helm values for kube-prometheus-stack
+|-- ingress.yaml              # ALB Ingress routing file
 |-- jenkinsfile               # Jenkins declarative pipeline
 |-- terraform/
 |   |-- env/                  # Main Terraform environment
@@ -570,7 +573,131 @@ After this, whenever code is pushed to GitHub, Jenkins can automatically start t
 
 ## 13. Monitoring and health checks
 
-For basic monitoring and troubleshooting, I used Kubernetes commands.
+For monitoring, I used Prometheus and Grafana.
+
+The monitoring stack used for verification was an existing Prometheus setup that sends data to remote Grafana through Thanos. This allowed me to confirm that Kubernetes deployment metrics from the application namespace were being collected and displayed in Grafana.
+
+I also added the Helm chart installation commands below so the same monitoring stack can be installed from scratch using the `kube-prometheus-stack` chart.
+
+### Prometheus and Grafana installation using Helm
+
+Add the Prometheus community Helm repository:
+
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+```
+
+Create a namespace for monitoring:
+
+```bash
+kubectl create namespace monitoring
+```
+
+Install Prometheus and Grafana using Helm:
+
+```bash
+helm upgrade --install prom prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --create-namespace
+```
+
+If custom values are required, the chart can be installed with `values.yaml`:
+
+```bash
+helm upgrade --install prom prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --create-namespace \
+  -f values.yaml
+```
+
+Check the monitoring pods:
+
+```bash
+kubectl get pods -n monitoring
+```
+
+Check the monitoring services:
+
+```bash
+kubectl get svc -n monitoring
+```
+
+### Application monitoring approach
+
+For this project, I monitored whether the application deployment was healthy by using Kubernetes metrics collected through `kube-state-metrics`.
+
+The main PromQL query used was:
+
+```promql
+kube_deployment_status_replicas_available{namespace="test", deployment="trend-store"}
+```
+
+This query returns the number of available replicas for the `trend-store` deployment.
+
+Expected value:
+
+```text
+2
+```
+
+If the value becomes `0`, it means no application pods are available.
+
+Alert query:
+
+```promql
+kube_deployment_status_replicas_available{namespace="test", deployment="trend-store"} < 1
+```
+
+I also used this query to compare the desired replica count:
+
+```promql
+kube_deployment_spec_replicas{namespace="test", deployment="trend-store"}
+```
+
+### Verifying that Prometheus is receiving data
+
+To confirm that Prometheus was receiving scrape data, I used:
+
+```promql
+up
+```
+
+For Kubernetes deployment metrics, I verified the `trend-store` deployment directly:
+
+```promql
+kube_deployment_status_replicas_available{namespace="test", deployment="trend-store"}
+```
+
+Proof of the Grafana alert query:
+
+![Grafana alert query](screenshots/Screenshot%202026-06-29%20182232.png)
+
+Proof of available replica metrics in Grafana:
+
+![Grafana replica count dashboard](screenshots/Screenshot%202026-06-29%20182519.png)
+
+### Testing monitoring by deleting one pod
+
+To test whether Grafana could show a change in application availability, I deleted one application pod:
+
+```bash
+kubectl delete pod trend-store-799944596b-5zhks -n test
+```
+
+Proof:
+
+![Deleting one application pod](screenshots/Screenshot%202026-06-29%20182627.png)
+
+After the pod was deleted, the deployment temporarily dropped from two available replicas to one available replica. Kubernetes then recreated the pod and the graph returned back to two replicas.
+
+Proof:
+
+![Grafana replica drop and recovery](screenshots/Screenshot%202026-06-29%20182741.png)
+
+### Basic Kubernetes health checks
+
+For basic monitoring and troubleshooting, I also used Kubernetes commands.
 
 Check cluster nodes:
 
@@ -615,8 +742,6 @@ Proof:
 
 ![EKS DNS check](screenshots/Screenshot%202026-06-23%20151323.png)
 
-For a more advanced open-source monitoring setup, Prometheus and Grafana can be added later using Helm.
-
 ## 14. How to get LoadBalancer DNS and ARN
 
 Get the LoadBalancer DNS:
@@ -653,7 +778,10 @@ EC2 -> Load Balancers -> Search using DNS name -> Copy ARN
 | `Dockerfile` | Builds the application container using Nginx |
 | `nginx.conf` | Serves the React app on port `3000` |
 | `deployment.yaml` | Creates Kubernetes deployment and pods |
-| `service.yaml` | Exposes app using AWS LoadBalancer |
+| `service.yaml` | Exposes the application inside Kubernetes |
+| `ingress.yaml` | Routes external ALB traffic to the application and Grafana paths |
+| `servicemonitor.yaml` | Defines Prometheus scrape configuration for the application service |
+| `values.yaml` | Stores Helm chart values for the Prometheus/Grafana stack |
 | `jenkinsfile` | Automates CI/CD pipeline |
 | `terraform/env/main.tf` | Main Terraform infrastructure entry point |
 | `.gitignore` | Prevents secrets, Terraform state, keys, and local files from being committed |
@@ -810,6 +938,14 @@ All screenshots are saved in the `screenshots/` folder.
 
 ![Screenshot 2026-06-23 214659](screenshots/Screenshot%202026-06-23%20214659.png)
 
+![Screenshot 2026-06-29 182232](screenshots/Screenshot%202026-06-29%20182232.png)
+
+![Screenshot 2026-06-29 182519](screenshots/Screenshot%202026-06-29%20182519.png)
+
+![Screenshot 2026-06-29 182627](screenshots/Screenshot%202026-06-29%20182627.png)
+
+![Screenshot 2026-06-29 182741](screenshots/Screenshot%202026-06-29%20182741.png)
+
 </details>
 
 ## Cleanup
@@ -840,6 +976,7 @@ terraform destroy
 - DockerHub image proof
 - Jenkins pipeline proof
 - EKS cluster proof
+- Prometheus/Grafana monitoring proof
 - Application LoadBalancer DNS
 - Application LoadBalancer ARN
 - Screenshots
